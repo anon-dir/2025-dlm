@@ -2,10 +2,26 @@
 
 This repo provides a full setup for DLMs.
 
+The setup is based on:
+
+* [Sisyphus workflow manager](https://github.com/rwth-i6/sisyphus).
+  Job classes define individual workflow steps, such as training a model, or evaluating a model,
+  or preparing data, etc.
+  Sisyphus manages dependencies between jobs, and can run jobs locally or on a cluster (e.g. via [Slurm](https://github.com/SchedMD/slurm)).
+* Existing Sisyphus recipes / job classes from
+  [i6_core](https://github.com/rwth-i6/i6_core),
+  [i6_experiments](https://github.com/rwth-i6/i6_experiments).
+* [RETURNN](https://github.com/rwth-i6/returnn).
+  The main deep learning framework used in this setup,
+  based on [PyTorch](https://pytorch.org/),
+  providing `Tensor` with named dimensions (`Dim` objects),
+  and many high-level modules for Transformers and other neural network architectures.
+  We derive our code (modeling, training, decoding, recipes) from existing example code.
+
 
 ## Usage
 
-Run:
+In the setup directory (see setup below), run:
 
 ```shell
 python ./sis manager recipe/denoising_lm/sis_recipe/<recipe_name>.py
