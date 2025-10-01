@@ -27,7 +27,6 @@ from returnn.frontend.encoder.transformer import TransformerEncoder
 from returnn.frontend.decoder.transformer import TransformerDecoder
 
 from i6_experiments.users.zeyer.experiments.exp2024_04_23_baselines.configs import (
-    config_11gb_v6_f32_accgrad1_mgpu4_pavg100_wd1e_4,
     post_config as baseline_post_config,
     _get_cfg_lrlin_oclr_by_bs_nep_v4,
 )
@@ -40,16 +39,80 @@ if TYPE_CHECKING:
 
 
 def py():
-    from .error_correction_model_gen_train_data import get_error_correction_model_task_via_tts_txt
+    from i6_experiments.users.zeyer.utils.sis_setup import get_setup_prefix_for_module
+    from i6_experiments.users.zeyer.sis_tools.instanciate_delayed import use_instanciate_delayed_copy_instead_of_inplace
+    from i6_experiments.users.zeyer.experiments.exp2024_04_23_baselines.configs import config_96gb_bf16_accgrad1
 
-    train_base_cfg = dict_update_deep(
-        config_11gb_v6_f32_accgrad1_mgpu4_pavg100_wd1e_4,
-        {
-            "optimizer.weight_decay": 1e-2,
-            "calculate_exp_loss": True,
-        },
+    from .error_correction_model_gen_train_data import get_error_correction_model_task_via_tts_txt
+    from .ctc import (
+        GetHypsCfgV3 as GetCtcHypsCfgV3,
+        GetHypsCfgV4 as GetCtcHypsCfgV4,
+        GetHypsCfgV6 as GetCtcHypsCfgV6,
+        sis_get_model as sis_get_ctc_model,
     )
-    task = get_error_correction_model_task_via_tts_txt()
+    from .tts_model import get_tts_opts_default_model, get_tts_opts_coqui_ai_tts_your_tts
+
+    prefix = get_setup_prefix_for_module(__name__)
+
+    use_instanciate_delayed_copy_instead_of_inplace()
+
+    # Base CTC model.
+    ctc_model_v2 = sis_get_ctc_model("L16-D1024-spm10k-auxAED-b100k")
+
+    # Better CTC model, trained also on TTS.
+    ctc_model_tts = sis_get_ctc_model("L16-D1024-spm10k-auxAED-b100k-tts")
+
+    # Correct TTS setting (nickCompat)
+    task_genTts_fm2_spm10k_drop05_01_noBn_lsh10_epSplit20_keepSubwords_ctcTts_nickCompat_numHyp1 = (
+        get_error_correction_model_task_via_tts_txt(
+            train_epoch_split=20,
+            vocab="spm10k",
+            hyps_model=ctc_model_tts,
+            num_hyps=1,
+            hyps_cfg=GetCtcHypsCfgV4(
+                dropout_min=0.1,
+                dropout_max=0.5,
+                enable_specaugment=True,
+                specaugment_opts={"steps": (0, 0, 0), "max_consecutive_spatial_dims": 0},
+            ),
+            hyps_tts_opts=get_tts_opts_default_model(
+                {
+                    "glow_tts_noise_scale_range": (0.3, 0.9),
+                    "glow_tts_length_scale_range": (0.7, 1.1),
+                },
+                compatible_to_nick=True,
+            ),
+            train_repeat_asr_data=10,
+            train_repeat_asr_data_via_num_hyps=True,
+            resplit_subwords=False,
+            dataset_use_deep_copy=True,
+            additional_eval_sets=["trainlike-lm-devtrain"],
+            get_hyps_extra_config={"behavior_version": 24},
+            dependency_boundary_hash="Y2syHSPzgCiL",
+        )
+    )
+    eval_task_spm10k_ctcNoTts_nickCompat = get_error_correction_model_task_via_tts_txt(
+        train_epoch_split=20,
+        vocab="spm10k",
+        num_hyps=0,
+        hyps_cfg=GetCtcHypsCfgV4(),
+        hyps_model=ctc_model_v2,
+        hyps_tts_opts=get_tts_opts_default_model(
+            {
+                "glow_tts_noise_scale_range": (0.3, 0.9),
+                "glow_tts_length_scale_range": (0.7, 1.1),
+            },
+            compatible_to_nick=True,
+        ),
+        additional_eval_sets=["trainlike-lm-devtrain"],
+        register_output=False,
+        train_repeat_asr_data=10,
+        train_repeat_asr_data_via_num_hyps=True,
+        resplit_subwords=False,
+        dataset_use_deep_copy=True,
+        get_hyps_extra_config={"behavior_version": 24},
+        use_dependency_boundary=False,
+    )
 
     # Llama / Transformer++ like
     common_trafo_kwargs = dict(
@@ -68,14 +131,181 @@ def py():
         **common_trafo_kwargs,
         layer_opts=dict(self_att=rf.build_dict(rf.RotaryPosCausalSelfAttention, with_bias=False)),
     )
+
+    aed_n1024_enc24_dec8_model_def = ModelDefWithCfg(
+        aed_model_def,
+        {
+            "_encoder_model_dict": rf.build_dict(
+                TransformerEncoder,
+                num_layers=24,
+                **dict_update_deep(common_trafo_enc_kwargs, {"model_dim": 1024}),
+            ),
+            "_decoder_model_dict": rf.build_dict(
+                TransformerDecoder,
+                num_layers=8,
+                **dict_update_deep(common_trafo_dec_kwargs, {"model_dim": 1024}),
+            ),
+            "input_add_eos": True,
+        },
+    )
+
+    train_base_cfg = dict_update_deep(
+        config_96gb_bf16_accgrad1,
+        {
+            "optimizer.weight_decay": 1e-2,
+            "calculate_exp_loss": True,
+        },
+    )
+
+    # greedy 3.86, dsr 3.46, dlm sum 3.32
+    fntl_nickCompat = train_exp(
+        "fileNameTooLong-oclr-nickCompat-nEp200-numHyp1",
+        task_genTts_fm2_spm10k_drop05_01_noBn_lsh10_epSplit20_keepSubwords_ctcTts_nickCompat_numHyp1,
+        model_def=aed_n1024_enc24_dec8_model_def,
+        config=dict_update_deep(
+            train_base_cfg,
+            {
+                **_get_cfg_lrlin_oclr_by_bs_nep_v4(200),
+                "batch_size": 20_000,
+                "max_seqs": 2_000,
+                "min_seq_length": 1,
+                "__multi_proc_dataset": False,  # not needed here
+                "input_swapout_range": (0.1, 0.1),
+            },
+        ),
+        post_config={"log_grad_norm": True},
+        asr_model_recog_args=make_asr_ctc_model_recog_args(
+            vocab="spm10k", ctc_model=ctc_model_tts, with_lm_rescore=True, calculate_search_errors=True
+        ),
+    )
+    # dlm sum 3.32
+    recog_model_ext(
+        dlm_task=task_genTts_fm2_spm10k_drop05_01_noBn_lsh10_epSplit20_keepSubwords_ctcTts_nickCompat_numHyp1,
+        asr_model=make_asr_ctc_model_recog_args(
+            vocab="spm10k",
+            ctc_model=ctc_model_tts,
+            max_dlm_scale=10.0,
+            dlm_sum_extra_args={"length_normalization_exponent": 1.0},
+        ),
+        dlm=fntl_nickCompat.get_epoch(200),
+        prefix="denoising-lm/error_correction_model/fileNameTooLong-oclr-nickCompat-nEp200-numHyp1/length_norm",
+    )
+    recog_model_ext(
+        dlm_task=eval_task_spm10k_ctcNoTts_nickCompat,
+        asr_model=make_asr_ctc_model_recog_args(
+            vocab="spm10k",
+            ctc_model=ctc_model_v2,
+            max_dlm_scale=10.0,
+            dlm_sum_extra_args={"length_normalization_exponent": 1.0},
+        ),
+        dlm=fntl_nickCompat.get_epoch(200),
+        prefix="denoising-lm/error_correction_model/fileNameTooLong-oclr-nickCompat-nEp200-numHyp1-ctcNoTts/length_norm",
+    )
+
+    from i6_experiments.users.zeyer.nn_rf.mixup import MixupOpts
+
+    low_task = get_error_correction_model_task_via_tts_txt(
+        train_epoch_split=20,
+        vocab="spm10k",
+        num_hyps=1,
+        hyps_cfg=GetCtcHypsCfgV6(
+            dropout_min=0.0,
+            dropout_max=0.2,
+            enable_specaugment=True,
+            specaugment_opts={"steps": (0, 0, 0), "max_consecutive_feature_dims": 0},
+            data_perturbation_opts={"mixup": MixupOpts(max_num_mix=2, lambda_min=0.0, lambda_max=0.2, apply_prob=1)},
+        ),
+        hyps_model=ctc_model_tts,
+        hyps_tts_opts=get_tts_opts_default_model(
+            {"glow_tts_noise_scale_range": (0.3, 0.9), "glow_tts_length_scale_range": (0.7, 1.1)},
+            compatible_to_nick=True,
+        ),
+        additional_eval_sets=["trainlike-lm-devtrain"],
+        train_repeat_asr_data=10,
+        train_repeat_asr_data_via_num_hyps=True,
+        register_output=False,
+        resplit_subwords=False,
+        dataset_use_deep_copy=True,
+        get_hyps_extra_config={"behavior_version": 24},
+        use_dependency_boundary=False,
+    )
+    # token substitution: (0.1, 0.1)
+    # recog_input_eval_datasets("spm10k-puttingItTogether(low)", simulate_token_substitution(low_task, (0.1, 0.1)))
+    exp = train_exp(
+        "base-puttingItTogether(low)-nEp200",
+        low_task,
+        model_def=aed_n1024_enc24_dec8_model_def,
+        config=dict_update_deep(
+            train_base_cfg,
+            {
+                **_get_cfg_lrlin_oclr_by_bs_nep_v4(200),
+                "batch_size": 20_000,
+                "max_seqs": 2_000,
+                "min_seq_length": 1,
+                "__multi_proc_dataset": False,
+                "input_swapout_range": (0.1, 0.1),
+            },
+        ),
+        post_config={"log_grad_norm": True},
+        asr_model_recog_args=make_asr_ctc_model_recog_args(
+            vocab="spm10k", ctc_model=ctc_model_tts, with_lm_rescore=True, max_dlm_scale=10
+        ),
+    )
+    # Same DLM, but CTC without TTS.
+    # TODO...
+    recog_model_ext(
+        dlm_task=eval_task_spm10k_ctcNoTts_nickCompat,
+        asr_model=make_asr_ctc_model_recog_args(vocab="spm10k", ctc_model=ctc_model_v2, max_dlm_scale=10),
+        dlm=exp.get_last_fixed_epoch(),
+        prefix="denoising-lm/error_correction_model/base-puttingItTogether(low)-nEp200-ctcNoTts",
+    )
+
+    # andYourTts: interleave our TTS with YourTTS
+    task_genTts_andYourTts_fm2_spm10k_drop05_lsh10_epSplit20_keepSubwords_ctcTts = (
+        get_error_correction_model_task_via_tts_txt(
+            prefix=f"{prefix}/ctc-L16-D1024-tts",
+            train_epoch_split=20,
+            vocab="spm10k",
+            hyps_model=ctc_model_tts,  # note: this is different TTS data!
+            num_hyps=5,
+            hyps_cfg=GetCtcHypsCfgV3(
+                dropout_min=0.0,
+                dropout_max=0.5,
+                enable_specaugment=True,
+                specaugment_opts={"steps": (0, 0, 0), "max_consecutive_spatial_dims": 0},
+            ),
+            hyps_tts_opts=[
+                get_tts_opts_default_model(
+                    {"glow_tts_noise_scale_range": (0.3, 0.9), "glow_tts_length_scale_range": (0.7, 1.1)}
+                ),
+                get_tts_opts_coqui_ai_tts_your_tts({"tts_model_opt_sample_ranges": {"length_scale": (1.0, 1.5)}}),
+            ],
+            train_repeat_asr_data=10,
+            train_repeat_asr_data_via_num_hyps=True,
+            resplit_subwords=False,
+            dataset_use_deep_copy=True,
+            version=2,
+            use_dependency_boundary=False,
+        )
+    )
+    recog_input_eval_datasets(
+        "genTts-andYourTts-fm2-spm10k-hypsV2-drop05-lsh10-epSplit20-keepSubwords-ctcTts",
+        task_genTts_andYourTts_fm2_spm10k_drop05_lsh10_epSplit20_keepSubwords_ctcTts,
+    )
+
+    # andYourTts
     train_exp(
-        "base",
-        task,
+        "base-genTts-andYourTts-fm2-spm10k-ctcDrop05-ctcTts-n1024-decL16-lsh10-epSplit20-keepSubwords-b2k_20k",
+        task_genTts_andYourTts_fm2_spm10k_drop05_lsh10_epSplit20_keepSubwords_ctcTts,
         model_def=ModelDefWithCfg(
             aed_model_def,
             {
-                "_encoder_model_dict": rf.build_dict(TransformerEncoder, num_layers=16, **common_trafo_enc_kwargs),
-                "_decoder_model_dict": rf.build_dict(TransformerDecoder, num_layers=4, **common_trafo_dec_kwargs),
+                "_encoder_model_dict": rf.build_dict(
+                    TransformerEncoder, num_layers=16, **dict_update_deep(common_trafo_enc_kwargs, {"model_dim": 1024})
+                ),
+                "_decoder_model_dict": rf.build_dict(
+                    TransformerDecoder, num_layers=16, **dict_update_deep(common_trafo_dec_kwargs, {"model_dim": 1024})
+                ),
                 "input_add_eos": True,
             },
         ),
@@ -83,12 +313,13 @@ def py():
             train_base_cfg,
             {
                 **_get_cfg_lrlin_oclr_by_bs_nep_v4(100),
-                "batch_size": 6_000,
-                "max_seqs": 100,
+                "batch_size": 20_000,
+                "max_seqs": 2_000,
                 "min_seq_length": 1,
                 "__multi_proc_dataset": False,  # not needed here
             },
         ),
+        asr_model_recog_args=make_asr_ctc_model_recog_args(vocab="spm10k", ctc_model=ctc_model_tts),
     )
 
 
@@ -497,7 +728,7 @@ def recog_model_ext(
         # from i6_experiments.users.zeyer.experiments.exp2024_04_23_baselines.recog_ext.aed_ctc import (
         #     model_recog_with_recomb,
         # )
-        from .auxiliary_encoder_loss import (
+        from ..recog.auxiliary_encoder_loss import (
             dlm_with_ctc_recomb_rescore_def,
             aux_aed_dlm_timesync_recog_recomb_autoscale,
             model_recog_with_recomb_labelsync,
