@@ -29,10 +29,34 @@ python ./sis manager recipe/denoising_lm/sis_recipe/<recipe_name>.py
 
 where `<recipe_name>` is one of the recipes provided in `src/denoising_lm/sis_recipe/`.
 
+## Setup dir structure
+
+The setup directory should have the following structure after following the setup instructions below:
+
+```text
+<setup_name>
+├── README.md
+├── .gitignore
+├── sis  -> tools/sisyphus/sis
+├── work -> <some work directory on a fast file system>
+├── alias/   # created and populated by sisyphus
+├── output/  # created and populated by sisyphus
+├── tools/
+│   ├── sisyphus/  # git clone of https://github.com/rwth-i6/sisyphus
+│   ├── returnn/   # git clone of https://github.com/rwth-i6/returnn
+│   └── ...
+├── recipe/
+│   ├── denoising_lm/    # git clone of <denoising lm repo>
+│   ├── i6_core/         # git clone of https://github.com/rwth-i6/i6_core
+│   ├── i6_experiments/  # git clone of https://github.com/rwth-i6/i6_experiments
+│   └── ...
+└── ...
+```
+
 ## Setup
 
 1. Create the new setup folder in your user directory, typically like `~/setups/<setup_name>` or `~/experiments/<setup_name>`. This will be your new setup root directory.
-```
+```shell
 mkdir ~/experiments/<setup_name>
 cd ~/experiments/<setup_name>
 ```
@@ -40,7 +64,7 @@ cd ~/experiments/<setup_name>
 Optional: The setup directory should be a Git repo itself,
 to keep track of the changes. You can do now:
 
-```
+```shell
 git init .
 edit README.md  # write a short description about your setup
 git add README.md
@@ -64,13 +88,13 @@ git commit .gitignore -m gitignore
 ```
 
 2. Create a new work folder under a "work" file system and link this as `work` into the Sisyphus setup root (`~/experiments/<setup_name>`).
-```
+```shell
 mkdir -p /work/<project>/<username>/sisyphus_work_dirs/<setup_name>
 ln -s /work/<project>/<username>/sisyphus_work_dirs/<setup_name> work
 ```
 
 3. Create a recipe folder in the Sisyphus setup root (`~/experiments/<setup_name>`) and clone the necessary recipe repositories:
-```
+```shell
 mkdir recipe
 
 git clone git@github.com:rwth-i6/i6_core.git recipe/i6_core
