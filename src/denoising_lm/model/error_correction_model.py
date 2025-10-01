@@ -93,7 +93,7 @@ class Model(rf.Module):
 
     def encode_k_dense(self, source: Tensor, *, k_log_probs: Tensor, spatial_dim: Dim, k_dim: Dim) -> rf.State:
         """
-        For :mod:`denoising_lm_2024.sis_recipe.error_correction_model_gen_train_data_dense`.
+        For :mod:`.error_correction_model_gen_train_data_dense`.
 
         :param source: [...,spatial_dim,k_dim]
         :param k_log_probs: [...,spatial_dim,k_dim]

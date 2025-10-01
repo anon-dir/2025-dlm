@@ -38,9 +38,9 @@ The setup directory should have the following structure after following the setu
 ├── README.md
 ├── .gitignore
 ├── sis  -> tools/sisyphus/sis
-├── work -> <some work directory on a fast file system>
-├── alias/   # created and populated by sisyphus
-├── output/  # created and populated by sisyphus
+├── work -> <some work directory on a fast file system>  # all jobs live here
+├── alias/   # created and populated by sisyphus. contains symlinks to jobs
+├── output/  # created and populated by sisyphus. contains symlinks to job outputs
 ├── tools/
 │   ├── sisyphus/  # git clone of https://github.com/rwth-i6/sisyphus
 │   ├── returnn/   # git clone of https://github.com/rwth-i6/returnn
