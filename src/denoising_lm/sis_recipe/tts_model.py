@@ -102,14 +102,6 @@ def get_tts_opts_coqui_ai_tts_your_tts(gen_opts: Optional[Dict[str, Any]] = None
     model_name = "tts_models/multilingual/multi-dataset/your_tts"
     repo_dir = coqui_ai_tts.get_default_tts_repo_dir()
 
-    try:
-        from coqpit import Coqpit
-    except ImportError:
-        raise ImportError(
-            "You need to install coqui dependencies to use their TTS model. "
-            "See i6_experiments.users.zeyer.external_models.coqui_ai_tts.DownloadModelJob docstring"
-        )
-
     return TtsOpts(
         model_opts={
             "class": CoquiAiTtsModel,

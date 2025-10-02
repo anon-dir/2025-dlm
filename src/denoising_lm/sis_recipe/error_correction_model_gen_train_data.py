@@ -279,7 +279,7 @@ def get_error_correction_model_task_via_tts_txt(
                 **make_dataset_common_kwargs,
                 subset=key,
                 # Use hyps_cfg without any sampling for the eval sets.
-                hyps_cfg=GetAedHypsCfgV1() if isinstance(hyps_cfg, GetAedHypsCfgV1) else GetCtcHypsCfgV4(),
+                hyps_cfg=GetCtcHypsCfgV4(),
                 eval=True,
             ),
             use_deep_copy=dataset_use_deep_copy,
@@ -321,8 +321,6 @@ def get_error_correction_model_task_via_tts_txt(
 def get_default_hyps_model_by_vocab_and_cfg(*, vocab: str, cfg: Optional[TGetHypsCfg] = None) -> ModelWithCheckpoint:
     if cfg is None or isinstance(cfg, (GetCtcHypsCfgV1, GetCtcHypsCfgV2, GetCtcHypsCfgV3, GetCtcHypsCfgV4)):
         return sis_get_ctc_model(vocab=vocab)
-    elif isinstance(cfg, GetAedHypsCfgV1):
-        return sis_get_aed_model(vocab=vocab)
     else:
         raise TypeError(f"invalid cfg {cfg!r} (type {type(cfg)})")
 
@@ -804,9 +802,6 @@ def get_asr_hyps_txt(
         hyps_hdfs, _ = sis_get_ctc_hyps_split(
             model, dataset=dataset, num_hyps=num_hyps, cfg=cfg, extra_config=get_hyps_extra_config
         )
-    elif isinstance(cfg, GetAedHypsCfgV1):
-        assert not get_hyps_extra_config
-        hyps_hdfs, _ = sis_get_aed_hyps_split(model, dataset=dataset, num_hyps=num_hyps, cfg=cfg)
     else:
         raise ValueError(f"invalid cfg {cfg!r} (type {type(cfg)})")
 

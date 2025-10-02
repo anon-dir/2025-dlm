@@ -46,15 +46,16 @@ def _get_tts_oggzips_base_dir():
 
 @cache
 def get_tts_oggzips() -> List[tk.Path]:
-    base_dir = _get_tts_oggzips_base_dir()
+    if os.environ.get("__DLM_TTS_BASE_DIR"):
+        base_dir = os.environ["__DLM_TTS_BASE_DIR"]
+    else:
+        base_dir = _get_tts_oggzips_base_dir()
+    hash_overwrite_prefix = ".../TTS-data/"  # TODO
+    if os.environ.get("__DLM_TTS_DATA_HASH_PREFIX"):
+        hash_overwrite_prefix = os.environ["__DLM_TTS_DATA_HASH_PREFIX"]
     ds = []
     for i in range(1, NUM_CORPUS_FILES + 1):
-        ds.append(
-            tk.Path(
-                f"{base_dir}/lm_data_part{i}_ogg.zip",
-                hash_overwrite=f".../TTS-data/{i}",  # TODO hash...
-            )
-        )
+        ds.append(tk.Path(f"{base_dir}/lm_data_part{i}_ogg.zip", hash_overwrite=f"{hash_overwrite_prefix}{i}"))
     return ds
 
 

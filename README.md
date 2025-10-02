@@ -165,4 +165,10 @@ See [Sisyphus documentation](https://sisyphus-workflow-manager.readthedocs.io/).
 6. Create some Python environment.
 You can use `virtualenv` or `conda` or other tools.
 We tested our setup with PyTorch 2.5.1.
-Install missing dependencies.
+Install missing dependencies:
+```text
+torch
+torchaudio
+psutil
+sentencepiece
+```
