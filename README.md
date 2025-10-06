@@ -167,8 +167,21 @@ You can use `virtualenv` or `conda` or other tools.
 We tested our setup with PyTorch 2.5.1.
 Install missing dependencies:
 ```text
+numpy
 torch
 torchaudio
+torchcodec
+datasets
 psutil
 sentencepiece
+dm-tree
+h5py
+flask
+soundfile
+librosa
+resampy
+ipython
+better_exchook
+lovely_tensors
+background_zmq_ipython
 ```
